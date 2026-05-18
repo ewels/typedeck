@@ -4,17 +4,17 @@
 	"Author": "Phil Ewels",
 	"Actions": [
 		{
-			"Name": "Counter",
-			"UUID": "com.ewels.type-deck.increment",
-			"Icon": "imgs/actions/counter/icon",
-			"Tooltip": "Displays a count, which increments by one on press.",
-			"PropertyInspectorPath": "ui/increment-counter.html",
+			"Name": "Fake Type",
+			"UUID": "com.ewels.type-deck.type",
+			"Icon": "imgs/actions/type/icon",
+			"Tooltip": "Types preset text character by character with configurable delays.",
+			"PropertyInspectorPath": "ui/fake-type.html",
 			"Controllers": [
 				"Keypad"
 			],
 			"States": [
 				{
-					"Image": "imgs/actions/counter/key",
+					"Image": "imgs/actions/type/key",
 					"TitleAlignment": "middle"
 				}
 			]
