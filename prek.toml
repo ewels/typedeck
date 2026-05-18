@@ -1,0 +1,44 @@
+# Run with `prek run --all-files`. Install the git hook with `prek install`.
+# Requires prek >= 0.4.0 (TOML config support).
+
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v5.0.0"
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+
+[[repos.hooks]]
+id = "end-of-file-fixer"
+
+[[repos.hooks]]
+id = "check-yaml"
+
+[[repos.hooks]]
+id = "check-json"
+exclude = "^\\.vscode/"
+
+[[repos.hooks]]
+id = "check-merge-conflict"
+
+[[repos.hooks]]
+id = "mixed-line-ending"
+
+[[repos.hooks]]
+id = "check-added-large-files"
+
+[[repos]]
+repo = "https://github.com/rbubley/mirrors-prettier"
+rev = "v3.4.2"
+
+[[repos.hooks]]
+id = "prettier"
+types_or = ["json", "yaml", "markdown", "html", "css"]
+
+[[repos]]
+repo = "https://github.com/biomejs/pre-commit"
+rev = "v2.2.0"
+
+[[repos.hooks]]
+id = "biome-check"
+additional_dependencies = ["@biomejs/biome@2.4.15"]
