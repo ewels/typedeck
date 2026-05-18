@@ -38,8 +38,10 @@ Useful for things like inserting boilerplate snippets, demo scripts, prepared an
 
 Download the latest `com.ewels.type-deck.streamDeckPlugin` from the [Releases](https://github.com/ewels/type-deck/releases) page and double-click it — Stream Deck will install the plugin.
 
+<!-- prettier-ignore-start -->
 > [!NOTE]
 > **macOS:** The plugin types via OS-level keyboard simulation, which may require granting Stream Deck **Accessibility** permission under _System Settings → Privacy & Security → Accessibility_.
+<!-- prettier-ignore-end -->
 
 ## Development
 
