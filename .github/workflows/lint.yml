@@ -1,0 +1,50 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PREK_VERSION: "0.4.0"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install prek
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSL "https://github.com/j178/prek/releases/download/v${PREK_VERSION}/prek-x86_64-unknown-linux-gnu.tar.gz" -o prek.tar.gz
+          tar -xzf prek.tar.gz
+          sudo mv prek-x86_64-unknown-linux-gnu/prek /usr/local/bin/prek
+          prek --version
+
+      - name: Cache prek hook environments
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/prek
+          key: prek-${{ runner.os }}-${{ env.PREK_VERSION }}-${{ hashFiles('prek.toml') }}
+          restore-keys: |
+            prek-${{ runner.os }}-${{ env.PREK_VERSION }}-
+
+      - name: Run prek hooks
+        run: prek run --all-files --show-diff-on-failure
+
+      - name: Type-check
+        run: npx tsc --noEmit

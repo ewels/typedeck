@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Stream Deck plugin ("Type Deck") that simulates a human typing preset text into the focused application when a Stream Deck key is pressed. Plugin UUID: `com.ewels.type-deck`. Single action: `com.ewels.type-deck.type` ("Fake Type").
+A Stream Deck plugin ("Type Deck") that simulates a human typing preset text into the focused application when a Stream Deck key is pressed. Plugin UUID: `com.ewels.type-deck`. Three actions:
+
+- `com.ewels.type-deck.type` ("Type text") — types `settings.text` verbatim. Supports long-press for an alternative text.
+- `com.ewels.type-deck.cycle` ("Cycle next") — text is one entry per line; each press types the next line, looping. Persists `cycleIndex` in settings.
+- `com.ewels.type-deck.random` ("Random pick") — text is one entry per line; each press types a random line.
 
 ## Commands
 
@@ -36,49 +40,60 @@ Hooks: standard pre-commit-hooks (whitespace/EOL/yaml/json/merge-conflict), Pret
 
 ```
 src/
-  plugin.ts                  bootstrap: registerAction(new FakeType()) + connect()
-  actions/fake-type.ts       the entire action lives here
+  plugin.ts             bootstrap: registers all three actions + connect()
+  actions/base.ts       BaseTypeAction — shared state, lifecycle, typing loop
+  actions/type.ts       TypeAction (long-press)
+  actions/cycle.ts      CycleAction (lines, advancing index)
+  actions/random.ts     RandomPickAction (lines, random pick)
 com.ewels.type-deck.sdPlugin/
-  manifest.json              plugin manifest (validated by Elgato JSON schema)
-  ui/fake-type.html          property inspector (sdpi-components v4 over CDN)
-  bin/plugin.js              rollup output, gitignored
-  imgs/, logs/               icons and runtime logs (logs gitignored)
-rollup.config.mjs            bundles src/ to bin/plugin.js
-                             `@nut-tree-fork/nut-js` is marked external — loaded
-                             from node_modules at runtime, not bundled
+  manifest.json         plugin manifest (validated by Elgato JSON schema)
+  ui/type.html          property inspector (sdpi-components v4 over CDN)
+  ui/cycle.html         PI for Cycle
+  ui/random.html        PI for Random pick
+  bin/plugin.js         rollup output, gitignored
+  imgs/, logs/          icons and runtime logs (logs gitignored)
+rollup.config.mjs       bundles src/ to bin/plugin.js
+                        `@nut-tree-fork/nut-js` is marked external — loaded
+                        from node_modules at runtime, not bundled
 ```
 
 The Stream Deck app spawns `node bin/plugin.js`, which connects to Stream Deck over a websocket. `@elgato/streamdeck` translates websocket events into per-action handlers via `SingletonAction`.
 
-`FakeType` extends `SingletonAction<TypeSettings>` and overrides `onWillAppear` / `onDidReceiveSettings` (preview title) and `onKeyDown` / `onKeyUp` (typing). All typing state (settings, cycle index, counter) is persisted on the action instance via `ev.action.setSettings(...)` — there is no global plugin state.
+`BaseTypeAction<S>` is an abstract `SingletonAction<S extends BaseTypingSettings>` that owns lifecycle methods (`onWillAppear`, `onDidReceiveSettings`, `onKeyDown`, `onKeyUp`), the typing loop, and per-instance state (`isTyping`, `abortRequested`, `queuedRun`, long-press timer). Subclasses override two hooks:
+
+- `pickText(settings)` — returns `{ text, update? }` (the `update` is merged into settings before typing starts, e.g. an advanced `cycleIndex`).
+- `pickLongPressText(settings)` — return `null` for no long-press; return a string to opt this action in.
+
+Per-action persisted state (counter, cycleIndex) is stored in the action's settings via `ev.action.setSettings(...)`. There is no global plugin state.
 
 ### Key press lifecycle
 
-`onKeyDown` decides one of three paths based on settings:
-1. **Already typing** — set `abortRequested` (cancel) or `queuedRun` (queue another run) and return.
-2. **Long press enabled** — start a timer for `longPressThresholdMs`. If `onKeyUp` fires first → short-press text. If timer fires first → `longPressText`.
-3. **Short press, no long-press config** — type immediately from `onKeyDown`.
+`BaseTypeAction.onKeyDown` decides one of three paths:
 
-Cycle/random selection runs before typing begins. Cycle index is **persisted before typing starts**, so an aborted run still advances the cycle. Variables (`{date}`, `{time}`, `{clipboard}`, `{counter}`) are always expanded; `{counter}` only writes to settings when actually referenced in the text.
+1. **Already typing** — set `abortRequested` (cancel) or `queuedRun` (queue another run) and return.
+2. **`pickLongPressText` returned a string** — start a timer for `longPressThresholdMs`. If `onKeyUp` fires first → short-press text. If timer fires first → long-press text.
+3. **Otherwise** — type immediately from `onKeyDown` using `pickText`.
+
+`pickText`'s `update` is persisted **before typing starts**, so an aborted run still advances the cycle. Variables (`{date}`, `{time}`, `{clipboard}`, `{counter}`) are always expanded; `{counter}` only writes to settings when actually referenced in the text.
 
 ### Two critical native-blocking workarounds
 
-Both live at the top of `src/actions/fake-type.ts` and must not be removed:
+Both live at the top of `src/actions/base.ts` and must not be removed:
 
 1. `keyboard.config.autoDelayMs = 0` disables nut-js's wrapper sleep between chars.
 2. `providerRegistry.getKeyboard().setKeyboardDelay(0)` overrides **libnut's internal** keyboardDelay, which nut-js's constructor sets to 300 ms by default. That delay is honored inside the synchronous native `typeString` call and blocks the JS thread per keystroke — long enough that websocket messages (including a second keyDown press) cannot be dispatched until typing finishes, breaking abort/queue.
 
-Related: the local `sleep()` helper uses `setTimeout` for *every* value including 0 ms. A `Promise.resolve()` for 0 ms only flushes the microtask queue and does not yield to macrotasks (where websocket messages dispatch), so a 100%-jitter roll of 0 ms would otherwise also block event delivery.
+Related: the local `sleep()` helper uses `setTimeout` for _every_ value including 0 ms. A `Promise.resolve()` for 0 ms only flushes the microtask queue and does not yield to macrotasks (where websocket messages dispatch), so a 100%-jitter roll of 0 ms would otherwise also block event delivery.
 
 ### Property inspector quirks
 
 - Plain HTML elements (`<small>`, `<div>`, plain text) inherit the Stream Deck PI webview's default font, which on macOS WebKit is **Times serif**. The `<style>` block sets `body { font-family: <system stack> }` to fix this. sdpi-components style their own shadow DOMs and are unaffected.
 - `sdpi-checkbox` value is a real boolean; `default="true"` is the initial display value when the setting is undefined — it doesn't necessarily auto-persist until the user touches the form.
-- Cycle and Random mode checkboxes are mutually exclusive — an inline script in the PI unchecks the counterpart when one is toggled on.
+- Cycle and Random pick are now separate actions, not checkboxes; their PI HTML lives alongside `ui/type.html`.
 
 ### Settings schema
 
-`TypeSettings` in `src/actions/fake-type.ts` is the source of truth for the runtime contract. Number fields are stored as strings by sdpi-textfield, so the runtime always re-parses through `toNumber(value, fallback)`. The `DEFAULTS` object holds the fallback used when a field is missing or unparseable — keep this in sync with the `placeholder=` / `default=` attributes in `ui/fake-type.html`.
+`BaseTypingSettings` in `src/actions/base.ts` is the source of truth for the shared runtime contract; each subclass extends it with action-specific fields (e.g. `longPress*` in `type.ts`, `cycleIndex` in `cycle.ts`). Number fields are stored as strings by sdpi-textfield, so the runtime always re-parses through `toNumber(value, fallback)`. The `DEFAULTS` object holds the fallback used when a field is missing or unparseable — keep this in sync with the `placeholder=` / `default=` attributes in `ui/type.html`.
 
 ### Manifest
 

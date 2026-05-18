@@ -1,13 +1,19 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <title>Type Deck Settings</title>
+    <title>Type Deck — Random Pick Settings</title>
     <meta charset="utf-8" />
     <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
     <style>
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Helvetica, Arial, sans-serif;
+        font-family:
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
       }
       .help {
         display: block;
@@ -30,57 +36,21 @@
   </head>
 
   <body>
-    <div class="section">Text</div>
-    <sdpi-item label="Text">
+    <div class="section">Lines</div>
+    <sdpi-item label="Lines">
       <sdpi-textarea
         setting="text"
-        placeholder="Text to type when the key is pressed..."
+        placeholder="One entry per line..."
         rows="6"
       ></sdpi-textarea>
     </sdpi-item>
     <small class="help">
-      Template variables: <code>{date}</code> = YYYY-MM-DD,
-      <code>{time}</code> = HH:MM:SS, <code>{clipboard}</code> = current
-      clipboard text, <code>{counter}</code> = press count (increments each
-      press). Use <code>{{</code> and <code>}}</code> for literal braces.
+      Each press types a randomly chosen non-empty line. Template variables:
+      <code>{date}</code> = YYYY-MM-DD, <code>{time}</code> = HH:MM:SS,
+      <code>{clipboard}</code> = current clipboard text,
+      <code>{counter}</code> = press count. Use <code>{{</code> and
+      <code>}}</code> for literal braces.
     </small>
-
-    <div class="section">Variants</div>
-    <sdpi-item label="Cycle mode">
-      <sdpi-checkbox
-        setting="cycleMode"
-        label="Use the next line each press"
-      ></sdpi-checkbox>
-    </sdpi-item>
-    <sdpi-item label="Random pick">
-      <sdpi-checkbox
-        setting="randomMode"
-        label="Pick a random line each press"
-      ></sdpi-checkbox>
-    </sdpi-item>
-
-    <div class="section">Long press</div>
-    <sdpi-item label="Long press">
-      <sdpi-checkbox
-        setting="longPressEnabled"
-        label="Enable separate long-press text"
-      ></sdpi-checkbox>
-    </sdpi-item>
-    <sdpi-item label="Long-press text">
-      <sdpi-textarea
-        setting="longPressText"
-        placeholder="Text typed when the key is held..."
-        rows="3"
-      ></sdpi-textarea>
-    </sdpi-item>
-    <sdpi-item label="Long-press threshold (ms)">
-      <sdpi-textfield
-        setting="longPressThresholdMs"
-        inputmode="numeric"
-        pattern="[0-9]*"
-        placeholder="500"
-      ></sdpi-textfield>
-    </sdpi-item>
 
     <div class="section">Safety</div>
     <sdpi-item label="Cancel">
@@ -155,24 +125,5 @@
         placeholder="3"
       ></sdpi-textfield>
     </sdpi-item>
-
-    <script>
-      // Cycle and Random pick are mutually exclusive — unchecking the
-      // counterpart when one is enabled keeps state consistent.
-      document.addEventListener("DOMContentLoaded", () => {
-        const cycle = document.querySelector('[setting="cycleMode"]');
-        const random = document.querySelector('[setting="randomMode"]');
-        if (!cycle || !random) return;
-        const sync = (changed, other) => {
-          changed.addEventListener("valuechanged", (ev) => {
-            if (ev.detail?.value === true && other.value === true) {
-              other.value = false;
-            }
-          });
-        };
-        sync(cycle, random);
-        sync(random, cycle);
-      });
-    </script>
   </body>
 </html>

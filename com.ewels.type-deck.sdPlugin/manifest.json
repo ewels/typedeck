@@ -7,15 +7,43 @@
   "SupportURL": "https://github.com/ewels/type-deck/issues",
   "Actions": [
     {
-      "Name": "Fake Type",
+      "Name": "Type text",
       "UUID": "com.ewels.type-deck.type",
       "Icon": "imgs/actions/type/icon",
       "Tooltip": "Types preset text character by character with configurable delays.",
-      "PropertyInspectorPath": "ui/fake-type.html",
+      "PropertyInspectorPath": "ui/type.html",
       "Controllers": ["Keypad"],
       "States": [
         {
           "Image": "imgs/actions/type/key",
+          "TitleAlignment": "middle"
+        }
+      ]
+    },
+    {
+      "Name": "Cycle next",
+      "UUID": "com.ewels.type-deck.cycle",
+      "Icon": "imgs/actions/cycle/icon",
+      "Tooltip": "Types the next line from a list each press, looping back to the start.",
+      "PropertyInspectorPath": "ui/cycle.html",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/cycle/key",
+          "TitleAlignment": "middle"
+        }
+      ]
+    },
+    {
+      "Name": "Random pick",
+      "UUID": "com.ewels.type-deck.random",
+      "Icon": "imgs/actions/random/icon",
+      "Tooltip": "Types a randomly picked line from a list each press.",
+      "PropertyInspectorPath": "ui/random.html",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/random/key",
           "TitleAlignment": "middle"
         }
       ]

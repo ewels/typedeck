@@ -1,5 +1,4 @@
 import {
-  action,
   type DidReceiveSettingsEvent,
   type KeyDownEvent,
   type KeyUpEvent,
@@ -25,7 +24,7 @@ function getNutKeyboardProvider(): { setKeyboardDelay(ms: number): void } {
   ).providerRegistry.getKeyboard();
 }
 
-type TypeSettings = {
+export type BaseTypingSettings = {
   text?: string;
   charDelay?: number | string;
   wordDelay?: number | string;
@@ -36,20 +35,11 @@ type TypeSettings = {
   typosEnabled?: boolean;
   typoChance?: number | string;
 
-  cycleMode?: boolean;
-  randomMode?: boolean;
-  cycleIndex?: number;
-
-  longPressEnabled?: boolean;
-  longPressText?: string;
-  longPressThresholdMs?: number | string;
-
   counter?: number;
-
   cancelOnSecondPress?: boolean;
 };
 
-const DEFAULTS = {
+export const DEFAULTS = {
   charDelay: 5,
   wordDelay: 40,
   paragraphDelay: 400,
@@ -68,7 +58,7 @@ const PREVIEW_MAX_LEN = 20;
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 
-function toNumber(value: unknown, fallback: number): number {
+export function toNumber(value: unknown, fallback: number): number {
   const n =
     typeof value === "number" ? value : Number.parseFloat(String(value));
   return Number.isFinite(n) && n >= 0 ? n : fallback;
@@ -127,7 +117,7 @@ function applyJitter(ms: number, pct: number): number {
   return Math.max(0, Math.round(ms * factor));
 }
 
-function splitLines(text: string): string[] {
+export function splitLines(text: string): string[] {
   return text
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -162,50 +152,47 @@ async function expandVariables(text: string, counter: number): Promise<string> {
   });
 }
 
-function hasLongPress(settings: TypeSettings): boolean {
-  return Boolean(settings.longPressEnabled && settings.longPressText);
-}
+/**
+ * Result of picking the text to type for a single press.
+ * `update` is merged into settings and persisted before typing starts, so an
+ * aborted run still advances cycle index / counter.
+ */
+export type PickResult<S> = {
+  text: string;
+  update?: Partial<S>;
+} | null;
 
-function pickText(
-  settings: TypeSettings,
-  isLongPress: boolean,
-): { text: string; nextCycleIndex?: number } | null {
-  if (isLongPress) {
-    return { text: settings.longPressText ?? "" };
-  }
-  if (settings.randomMode) {
-    const lines = splitLines(settings.text ?? "");
-    if (lines.length === 0) return null;
-    return { text: lines[Math.floor(Math.random() * lines.length)] };
-  }
-  if (settings.cycleMode) {
-    const lines = splitLines(settings.text ?? "");
-    if (lines.length === 0) return null;
-    const idx = toNumber(settings.cycleIndex, 0) % lines.length;
-    return { text: lines[idx], nextCycleIndex: (idx + 1) % lines.length };
-  }
-  return { text: settings.text ?? "" };
-}
-
-@action({ UUID: "com.ewels.type-deck.type" })
-export class FakeType extends SingletonAction<TypeSettings> {
+export abstract class BaseTypeAction<
+  S extends BaseTypingSettings,
+> extends SingletonAction<S> {
   private isTyping = false;
   private abortRequested = false;
   private queuedRun = false;
+
+  /** Subclass-specific text selection. Long-press handling is opt-in. */
+  protected abstract pickText(settings: S): PickResult<S>;
+
+  /** Override in TypeAction to return the long-press text. */
+  protected pickLongPressText(_settings: S): string | null {
+    return null;
+  }
+
+  protected longPressThreshold(_settings: S): number {
+    return DEFAULTS.longPressThresholdMs;
+  }
+
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
   private longPressFired = false;
 
-  override onWillAppear(ev: WillAppearEvent<TypeSettings>): Promise<void> {
+  override onWillAppear(ev: WillAppearEvent<S>): Promise<void> {
     return ev.action.setTitle(previewTitle(ev.payload.settings.text));
   }
 
-  override onDidReceiveSettings(
-    ev: DidReceiveSettingsEvent<TypeSettings>,
-  ): Promise<void> {
+  override onDidReceiveSettings(ev: DidReceiveSettingsEvent<S>): Promise<void> {
     return ev.action.setTitle(previewTitle(ev.payload.settings.text));
   }
 
-  override async onKeyDown(ev: KeyDownEvent<TypeSettings>): Promise<void> {
+  override async onKeyDown(ev: KeyDownEvent<S>): Promise<void> {
     const { settings } = ev.payload;
 
     if (this.isTyping) {
@@ -217,24 +204,22 @@ export class FakeType extends SingletonAction<TypeSettings> {
       return;
     }
 
-    if (hasLongPress(settings)) {
-      const threshold = toNumber(
-        settings.longPressThresholdMs,
-        DEFAULTS.longPressThresholdMs,
-      );
+    const longText = this.pickLongPressText(settings);
+    if (longText !== null) {
+      const threshold = this.longPressThreshold(settings);
       this.longPressFired = false;
       this.longPressTimer = setTimeout(() => {
         this.longPressTimer = null;
         this.longPressFired = true;
-        void this.runTyping(ev.action, settings, true);
+        void this.runTyping(ev.action, settings, longText);
       }, threshold);
       return;
     }
 
-    await this.runTyping(ev.action, settings, false);
+    await this.runTyping(ev.action, settings, null);
   }
 
-  override async onKeyUp(ev: KeyUpEvent<TypeSettings>): Promise<void> {
+  override async onKeyUp(ev: KeyUpEvent<S>): Promise<void> {
     if (this.longPressTimer !== null) {
       clearTimeout(this.longPressTimer);
       this.longPressTimer = null;
@@ -243,22 +228,27 @@ export class FakeType extends SingletonAction<TypeSettings> {
       this.longPressFired = false;
       return;
     }
-    if (hasLongPress(ev.payload.settings)) {
-      await this.runTyping(ev.action, ev.payload.settings, false);
+    if (this.pickLongPressText(ev.payload.settings) !== null) {
+      await this.runTyping(ev.action, ev.payload.settings, null);
     }
   }
 
   private async runTyping(
-    action: KeyDownEvent<TypeSettings>["action"],
-    settings: TypeSettings,
-    isLongPress: boolean,
+    action: KeyDownEvent<S>["action"],
+    settings: S,
+    longPressText: string | null,
   ): Promise<void> {
     if (this.isTyping) return;
     this.isTyping = true;
     this.abortRequested = false;
 
     try {
-      const picked = pickText(settings, isLongPress);
+      let picked: PickResult<S>;
+      if (longPressText !== null) {
+        picked = { text: longPressText };
+      } else {
+        picked = this.pickText(settings);
+      }
       if (!picked || !picked.text) return;
 
       const usesCounter = picked.text.includes("{counter}");
@@ -266,14 +256,13 @@ export class FakeType extends SingletonAction<TypeSettings> {
         toNumber(settings.counter, 0) + (usesCounter ? 1 : 0);
       const text = await expandVariables(picked.text, counterValue);
 
-      // Persist before typing so an aborted run still advances the cycle.
-      const update: Partial<TypeSettings> = {};
-      if (picked.nextCycleIndex !== undefined) {
-        update.cycleIndex = picked.nextCycleIndex;
-      }
+      // Persist before typing so an aborted run still advances state.
+      const update: Partial<S> & Partial<BaseTypingSettings> = picked.update
+        ? { ...picked.update }
+        : {};
       if (usesCounter) update.counter = counterValue;
       if (Object.keys(update).length > 0) {
-        await action.setSettings({ ...settings, ...update });
+        await action.setSettings({ ...settings, ...update } as S);
       }
 
       const charDelay = toNumber(settings.charDelay, DEFAULTS.charDelay);
@@ -347,8 +336,8 @@ export class FakeType extends SingletonAction<TypeSettings> {
 
       if (this.queuedRun) {
         this.queuedRun = false;
-        const fresh = await action.getSettings<TypeSettings>();
-        void this.runTyping(action, fresh, false);
+        const fresh = await action.getSettings<S>();
+        void this.runTyping(action, fresh, null);
       }
     }
   }
