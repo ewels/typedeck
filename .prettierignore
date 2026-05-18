@@ -1,0 +1,12 @@
+node_modules
+package-lock.json
+com.ewels.type-deck.sdPlugin/bin
+com.ewels.type-deck.sdPlugin/logs
+
+# Biome handles JS/TS
+*.ts
+*.tsx
+*.js
+*.jsx
+*.mjs
+*.cjs

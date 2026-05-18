@@ -1,47 +1,45 @@
 {
-	"Name": "Type Deck",
-	"Version": "0.1.0.0",
-	"Author": "Phil Ewels",
-	"Actions": [
-		{
-			"Name": "Fake Type",
-			"UUID": "com.ewels.type-deck.type",
-			"Icon": "imgs/actions/type/icon",
-			"Tooltip": "Types preset text character by character with configurable delays.",
-			"PropertyInspectorPath": "ui/fake-type.html",
-			"Controllers": [
-				"Keypad"
-			],
-			"States": [
-				{
-					"Image": "imgs/actions/type/key",
-					"TitleAlignment": "middle"
-				}
-			]
-		}
-	],
-	"Category": "Type Deck",
-	"CategoryIcon": "imgs/plugin/category-icon",
-	"CodePath": "bin/plugin.js",
-	"Description": "Type preset strings with configurable keypress delay",
-	"Icon": "imgs/plugin/marketplace",
-	"SDKVersion": 3,
-	"Software": {
-		"MinimumVersion": "7.1"
-	},
-	"OS": [
-		{
-			"Platform": "mac",
-			"MinimumVersion": "12"
-		},
-		{
-			"Platform": "windows",
-			"MinimumVersion": "10"
-		}
-	],
-	"Nodejs": {
-		"Version": "24",
-		"Debug": "enabled"
-	},
-	"UUID": "com.ewels.type-deck"
+  "Name": "Type Deck",
+  "Version": "0.1.0.0",
+  "Author": "Phil Ewels",
+  "Actions": [
+    {
+      "Name": "Fake Type",
+      "UUID": "com.ewels.type-deck.type",
+      "Icon": "imgs/actions/type/icon",
+      "Tooltip": "Types preset text character by character with configurable delays.",
+      "PropertyInspectorPath": "ui/fake-type.html",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/type/key",
+          "TitleAlignment": "middle"
+        }
+      ]
+    }
+  ],
+  "Category": "Type Deck",
+  "CategoryIcon": "imgs/plugin/category-icon",
+  "CodePath": "bin/plugin.js",
+  "Description": "Type preset strings with configurable keypress delay",
+  "Icon": "imgs/plugin/marketplace",
+  "SDKVersion": 3,
+  "Software": {
+    "MinimumVersion": "7.1"
+  },
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "12"
+    },
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "Nodejs": {
+    "Version": "24",
+    "Debug": "enabled"
+  },
+  "UUID": "com.ewels.type-deck"
 }
