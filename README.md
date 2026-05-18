@@ -30,6 +30,10 @@ Useful for things like inserting boilerplate snippets, demo scripts, prepared an
   - Use `{{` and `}}` for literal braces.
 - **Cancel or queue.** Pressing the key while it's already typing either aborts the current run (default) or queues another run to start immediately after, depending on the per-action setting.
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="Type Deck plugin in the Stream Deck app, showing the three actions and the Type text settings panel">
+</p>
+
 ## Installation
 
 Download the latest `com.ewels.type-deck.streamDeckPlugin` from the [Releases](https://github.com/ewels/type-deck/releases) page and double-click it — Stream Deck will install the plugin.
