@@ -1,7 +1,10 @@
 {
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "Name": "Type Deck",
   "Version": "0.1.0.0",
   "Author": "Phil Ewels",
+  "URL": "https://github.com/ewels/type-deck",
+  "SupportURL": "https://github.com/ewels/type-deck/issues",
   "Actions": [
     {
       "Name": "Fake Type",
