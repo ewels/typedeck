@@ -28,7 +28,7 @@ jobs:
         # The rollup build keeps `@nut-tree-fork/libnut` (and its platform
         # sub-packages) external. `@nut-tree-fork/libnut` lists all three
         # `libnut-{darwin,win32,linux}` packages as regular deps, so a plain
-        # `npm install` here pulls every platform's `.node` binary — no
+        # `npm install` here pulls every platform's `.node` binary: no
         # `--os` gymnastics required.
         run: |
           set -euo pipefail

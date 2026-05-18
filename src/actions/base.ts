@@ -66,7 +66,7 @@ export const DEFAULTS = {
 
 const PREVIEW_MAX_LEN = 20;
 
-// Always go via setTimeout — `Promise.resolve()` only flushes microtasks, which
+// Always go via setTimeout: `Promise.resolve()` only flushes microtasks, which
 // doesn't let the websocket message queue (a macrotask) process a second
 // keyDown event mid-typing.
 const sleep = (ms: number): Promise<void> =>
