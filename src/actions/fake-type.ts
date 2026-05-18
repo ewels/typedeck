@@ -5,10 +5,11 @@ import {
 	SingletonAction,
 	WillAppearEvent,
 } from "@elgato/streamdeck";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { Key, keyboard } from "@nut-tree-fork/nut-js";
 
-const run = promisify(execFile);
+// We manage every delay ourselves in code, so disable the library's built-in
+// per-keypress wait.
+keyboard.config.autoDelayMs = 0;
 
 type TypeSettings = {
 	text?: string;
@@ -18,8 +19,8 @@ type TypeSettings = {
 };
 
 const DEFAULTS = {
-	charDelay: 40,
-	wordDelay: 80,
+	charDelay: 5,
+	wordDelay: 40,
 	paragraphDelay: 400,
 	initialDelay: 300,
 } as const;
@@ -36,21 +37,6 @@ function previewTitle(text: string | undefined): string {
 	const collapsed = (text ?? "").replace(/\s+/g, " ").trim();
 	if (!collapsed) return "Type";
 	return collapsed.length > 20 ? collapsed.slice(0, 20) + "…" : collapsed;
-}
-
-// AppleScript strings are double-quoted; escape backslashes and double quotes
-// so the keystroke literal is preserved verbatim.
-function appleScriptEscape(text: string): string {
-	return text.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
-async function sendKeystroke(text: string): Promise<void> {
-	const script = `tell application "System Events" to keystroke "${appleScriptEscape(text)}"`;
-	await run("osascript", ["-e", script]);
-}
-
-async function sendReturn(): Promise<void> {
-	await run("osascript", ["-e", `tell application "System Events" to key code 36`]);
 }
 
 @action({ UUID: "com.ewels.type-deck.type" })
@@ -71,21 +57,42 @@ export class FakeType extends SingletonAction<TypeSettings> {
 		const wordDelay = toNumber(ev.payload.settings.wordDelay, DEFAULTS.wordDelay);
 		const paragraphDelay = toNumber(ev.payload.settings.paragraphDelay, DEFAULTS.paragraphDelay);
 
-		// Give the user a moment to focus the target window after the key press.
+		// Give the user a moment to refocus the target window after the key press.
 		await sleep(DEFAULTS.initialDelay);
+
+		// Group runs of chars (including the trailing space/) into a single
+		// keyboard.type() call when there is no per-character delay — each call
+		// has fixed overhead, so batching dramatically speeds up zero-delay typing.
+		let buffer = "";
+		const flush = async (): Promise<void> => {
+			if (buffer) {
+				await keyboard.type(buffer);
+				buffer = "";
+			}
+		};
 
 		for (const char of text) {
 			if (char === "\r") continue;
 			if (char === "\n") {
-				await sendReturn();
+				await flush();
+				await keyboard.type(Key.Enter);
 				await sleep(charDelay + paragraphDelay);
 			} else if (char === " ") {
-				await sendKeystroke(" ");
-				await sleep(charDelay + wordDelay);
+				buffer += " ";
+				if (charDelay > 0) {
+					await flush();
+					await sleep(charDelay);
+				}
+				await flush();
+				await sleep(wordDelay);
 			} else {
-				await sendKeystroke(char);
-				await sleep(charDelay);
+				buffer += char;
+				if (charDelay > 0) {
+					await flush();
+					await sleep(charDelay);
+				}
 			}
 		}
+		await flush();
 	}
 }

@@ -13,6 +13,7 @@ const sdPlugin = "com.ewels.type-deck.sdPlugin";
  */
 const config = {
 	input: "src/plugin.ts",
+	external: ["@nut-tree-fork/nut-js"],
 	output: {
 		file: `${sdPlugin}/bin/plugin.js`,
 		sourcemap: isWatching,
