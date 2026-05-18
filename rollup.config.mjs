@@ -13,7 +13,10 @@ const sdPlugin = "com.ewels.type-deck.sdPlugin";
  */
 const config = {
   input: "src/plugin.ts",
-  external: ["@nut-tree-fork/nut-js"],
+  // Native .node files can't be bundled; load them at runtime from the
+  // packaged plugin's node_modules. The platform sub-packages are pulled in
+  // transitively when `@nut-tree-fork/libnut` is installed.
+  external: /^@nut-tree-fork\//,
   output: {
     file: `${sdPlugin}/bin/plugin.js`,
     sourcemap: isWatching,

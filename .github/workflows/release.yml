@@ -25,9 +25,11 @@ jobs:
       - run: npm run build
 
       - name: Stage runtime deps inside the plugin folder
-        # The rollup build keeps `@nut-tree-fork/nut-js` external, so it must
-        # live in the packed plugin's node_modules. `--include=optional` is
-        # what brings in the platform-specific libnut native bindings.
+        # The rollup build keeps `@nut-tree-fork/libnut` (and its platform
+        # sub-packages) external. `@nut-tree-fork/libnut` lists all three
+        # `libnut-{darwin,win32,linux}` packages as regular deps, so a plain
+        # `npm install` here pulls every platform's `.node` binary — no
+        # `--os` gymnastics required.
         run: |
           set -euo pipefail
           cat > com.ewels.type-deck.sdPlugin/package.json <<'EOF'
@@ -35,12 +37,12 @@ jobs:
             "type": "module",
             "private": true,
             "dependencies": {
-              "@nut-tree-fork/nut-js": "^4.2.6"
+              "@nut-tree-fork/libnut": "^4.2.6"
             }
           }
           EOF
           cd com.ewels.type-deck.sdPlugin
-          npm install --omit=dev --include=optional --no-package-lock --no-fund --no-audit
+          npm install --omit=dev --no-package-lock --no-fund --no-audit
 
       - name: Pack
         run: npx --no-install streamdeck pack com.ewels.type-deck.sdPlugin --force

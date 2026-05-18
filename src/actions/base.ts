@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   type DidReceiveSettingsEvent,
   type KeyDownEvent,
@@ -5,23 +7,35 @@ import {
   SingletonAction,
   type WillAppearEvent,
 } from "@elgato/streamdeck";
-import { clipboard, Key, keyboard } from "@nut-tree-fork/nut-js";
+import { libnut } from "@nut-tree-fork/libnut/dist/import_libnut.js";
 
-// `autoDelayMs` is nut-js's own sleep between chars; `setKeyboardDelay` overrides
-// the native libnut delay that otherwise blocks the JS thread for ~300 ms per
-// keystroke and starves the websocket loop, preventing a second keyDown press
-// from ever being received mid-typing.
-keyboard.config.autoDelayMs = 0;
-getNutKeyboardProvider().setKeyboardDelay(0);
+const execFileP = promisify(execFile);
 
-function getNutKeyboardProvider(): { setKeyboardDelay(ms: number): void } {
-  return (
-    keyboard as unknown as {
-      providerRegistry: {
-        getKeyboard(): { setKeyboardDelay(ms: number): void };
-      };
+// libnut's default native keyboardDelay is 300 ms and is honored *inside* the
+// synchronous native typeString call. That blocks the JS thread per keystroke
+// and starves the websocket loop, preventing a second keyDown press from being
+// received mid-typing. Set to 0 here; all timing is managed in user-space.
+libnut.setKeyboardDelay(0);
+
+async function readClipboard(): Promise<string> {
+  try {
+    if (process.platform === "darwin") {
+      const { stdout } = await execFileP("pbpaste", []);
+      return stdout;
     }
-  ).providerRegistry.getKeyboard();
+    if (process.platform === "win32") {
+      // windowsHide prevents a console flash every time {clipboard} expands.
+      const { stdout } = await execFileP(
+        "powershell.exe",
+        ["-NoProfile", "-Command", "Get-Clipboard"],
+        { windowsHide: true },
+      );
+      return stdout.replace(/\r?\n$/, "");
+    }
+    return "";
+  } catch {
+    return "";
+  }
 }
 
 export type BaseTypingSettings = {
@@ -128,9 +142,7 @@ const VAR_PATTERN = /\{\{|\}\}|\{(date|time|counter|clipboard)\}/g;
 
 async function expandVariables(text: string, counter: number): Promise<string> {
   if (!text.includes("{")) return text;
-  const clip = text.includes("{clipboard}")
-    ? await clipboard.getContent().catch(() => "")
-    : "";
+  const clip = text.includes("{clipboard}") ? await readClipboard() : "";
   return text.replace(VAR_PATTERN, (match, name) => {
     if (match === "{{") return "{";
     if (match === "}}") return "}";
@@ -285,23 +297,23 @@ export abstract class BaseTypeAction<
       await sleep(DEFAULTS.initialDelay);
 
       let buffer = "";
-      const flush = async (): Promise<void> => {
+      const flush = (): void => {
         if (buffer) {
-          await keyboard.type(buffer);
+          libnut.typeString(buffer);
           buffer = "";
         }
       };
 
       for (const char of text) {
         if (this.abortRequested) {
-          await flush();
+          flush();
           return;
         }
         if (char === "\r") continue;
 
         if (char === "\n") {
-          await flush();
-          await keyboard.type(Key.Enter);
+          flush();
+          libnut.keyTap("enter", []);
           await delay(charDelay + paragraphDelay);
           continue;
         }
@@ -309,11 +321,11 @@ export abstract class BaseTypeAction<
         if (typoChance > 0 && Math.random() < typoChance) {
           const wrong = adjacentKey(char);
           if (wrong) {
-            await flush();
-            await keyboard.type(wrong);
+            flush();
+            libnut.typeString(wrong);
             await delay(DEFAULTS.typoCorrectionMs);
             if (this.abortRequested) return;
-            await keyboard.type(Key.Backspace);
+            libnut.keyTap("backspace", []);
             await delay(charDelay * 2);
             if (this.abortRequested) return;
           }
@@ -321,15 +333,15 @@ export abstract class BaseTypeAction<
 
         buffer += char;
         if (charDelay > 0) {
-          await flush();
+          flush();
           await delay(charDelay);
         }
         if (char === " ") {
-          await flush();
+          flush();
           await delay(wordDelay);
         }
       }
-      await flush();
+      flush();
     } finally {
       this.isTyping = false;
       this.abortRequested = false;

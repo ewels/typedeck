@@ -53,8 +53,8 @@ com.ewels.type-deck.sdPlugin/
   bin/plugin.js         rollup output, gitignored
   imgs/, logs/          icons and runtime logs (logs gitignored)
 rollup.config.mjs       bundles src/ to bin/plugin.js
-                        `@nut-tree-fork/nut-js` is marked external — loaded
-                        from node_modules at runtime, not bundled
+                        `@nut-tree-fork/*` packages are marked external —
+                        loaded from node_modules at runtime, not bundled
 ```
 
 The Stream Deck app spawns `node bin/plugin.js`, which connects to Stream Deck over a websocket. `@elgato/streamdeck` translates websocket events into per-action handlers via `SingletonAction`.
@@ -76,12 +76,15 @@ Per-action persisted state (counter, cycleIndex) is stored in the action's setti
 
 `pickText`'s `update` is persisted **before typing starts**, so an aborted run still advances the cycle. Variables (`{date}`, `{time}`, `{clipboard}`, `{counter}`) are always expanded; `{counter}` only writes to settings when actually referenced in the text.
 
-### Two critical native-blocking workarounds
+### Native keyboard / clipboard
 
-Both live at the top of `src/actions/base.ts` and must not be removed:
+The plugin calls into [`@nut-tree-fork/libnut`](https://www.npmjs.com/package/@nut-tree-fork/libnut) directly (the raw native binding under nut-js) via its internal subpath `dist/import_libnut.js` — a type shim lives at `src/types/libnut.d.ts`. We use exactly three libnut functions: `typeString`, `keyTap`, `setKeyboardDelay`. Clipboard reads use a small `pbpaste` / PowerShell `Get-Clipboard` subprocess in `readClipboard()`; no clipboard dependency.
 
-1. `keyboard.config.autoDelayMs = 0` disables nut-js's wrapper sleep between chars.
-2. `providerRegistry.getKeyboard().setKeyboardDelay(0)` overrides **libnut's internal** keyboardDelay, which nut-js's constructor sets to 300 ms by default. That delay is honored inside the synchronous native `typeString` call and blocks the JS thread per keystroke — long enough that websocket messages (including a second keyDown press) cannot be dispatched until typing finishes, breaking abort/queue.
+The libnut package transitively installs `libnut-darwin`, `libnut-win32` and `libnut-linux` as regular deps — every install gets all three platform `.node` files, so packaging is platform-agnostic.
+
+### One critical native-blocking workaround
+
+At the top of `src/actions/base.ts` you'll see `libnut.setKeyboardDelay(0)`. Don't remove it. libnut's default internal `keyboardDelay` is **300 ms** and that sleep happens _inside_ the synchronous native `typeString` call. It blocks the JS thread per keystroke — long enough that websocket messages (including a second keyDown press) cannot be dispatched until typing finishes, breaking abort/queue.
 
 Related: the local `sleep()` helper uses `setTimeout` for _every_ value including 0 ms. A `Promise.resolve()` for 0 ms only flushes the microtask queue and does not yield to macrotasks (where websocket messages dispatch), so a 100%-jitter roll of 0 ms would otherwise also block event delivery.
 

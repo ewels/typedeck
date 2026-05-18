@@ -28,6 +28,6 @@
   },
   "dependencies": {
     "@elgato/streamdeck": "^2.0.0",
-    "@nut-tree-fork/nut-js": "^4.2.6"
+    "@nut-tree-fork/libnut": "~4.2.6"
   }
 }
