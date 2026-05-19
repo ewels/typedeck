@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import {
   type DidReceiveSettingsEvent,
@@ -11,6 +11,9 @@ import { libnut } from "@nut-tree-fork/libnut/dist/import_libnut.js";
 
 const execFileP = promisify(execFile);
 
+const IS_MAC = process.platform === "darwin";
+const IS_WIN = process.platform === "win32";
+
 // libnut's default native keyboardDelay is 300 ms and is honored *inside* the
 // synchronous native typeString call. That blocks the JS thread per keystroke
 // and starves the websocket loop, preventing a second keyDown press from being
@@ -19,11 +22,11 @@ libnut.setKeyboardDelay(0);
 
 async function readClipboard(): Promise<string> {
   try {
-    if (process.platform === "darwin") {
+    if (IS_MAC) {
       const { stdout } = await execFileP("pbpaste", []);
       return stdout;
     }
-    if (process.platform === "win32") {
+    if (IS_WIN) {
       // windowsHide prevents a console flash every time {clipboard} expands.
       const { stdout } = await execFileP(
         "powershell.exe",
@@ -38,8 +41,41 @@ async function readClipboard(): Promise<string> {
   }
 }
 
+function writeClipboard(text: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let cmd: string;
+    let args: string[] = [];
+    let opts: { windowsHide?: boolean } = {};
+    if (IS_MAC) {
+      cmd = "pbcopy";
+    } else if (IS_WIN) {
+      cmd = "powershell.exe";
+      // [Console]::In.ReadToEnd() reads stdin as one blob, preserving newlines.
+      args = [
+        "-NoProfile",
+        "-Command",
+        "[Console]::In.ReadToEnd() | Set-Clipboard",
+      ];
+      opts = { windowsHide: true };
+    } else {
+      resolve(false);
+      return;
+    }
+    try {
+      const child = spawn(cmd, args, opts);
+      child.on("error", () => resolve(false));
+      child.on("close", (code) => resolve(code === 0));
+      child.stdin.on("error", () => resolve(false));
+      child.stdin.end(text, "utf-8");
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
 export type BaseTypingSettings = {
   text?: string;
+  instantType?: boolean;
   charDelay?: number | string;
   wordDelay?: number | string;
   paragraphDelay?: number | string;
@@ -57,7 +93,6 @@ export const DEFAULTS = {
   charDelay: 5,
   wordDelay: 40,
   paragraphDelay: 400,
-  initialDelay: 300,
   jitterPercent: 100,
   typoChance: 3,
   typoCorrectionMs: 400,
@@ -263,6 +298,10 @@ export abstract class BaseTypeAction<
       }
       if (!picked || !picked.text) return;
 
+      // Kick off the clipboard read in parallel with expandVariables — saves a
+      // subprocess round-trip on every instant-paste press.
+      const originalClipboard = settings.instantType ? readClipboard() : null;
+
       const usesCounter = picked.text.includes("{counter}");
       const counterValue =
         toNumber(settings.counter, 0) + (usesCounter ? 1 : 0);
@@ -275,6 +314,34 @@ export abstract class BaseTypeAction<
       if (usesCounter) update.counter = counterValue;
       if (Object.keys(update).length > 0) {
         await action.setSettings({ ...settings, ...update } as S);
+      }
+
+      if (settings.instantType) {
+        const original = await originalClipboard;
+        if (await writeClipboard(text)) {
+          // libnut uses "meta" for the macOS Command key; "control" on Windows.
+          const modifier = IS_MAC ? "meta" : "control";
+          // libnut's keyboardDelay is 0 (set at module load) — fine for typing,
+          // but with no gap between the modifier press and the key tap macOS
+          // doesn't register Cmd+V. Restore a small delay just for the paste.
+          libnut.setKeyboardDelay(40);
+          try {
+            libnut.keyTap("v", [modifier]);
+          } finally {
+            libnut.setKeyboardDelay(0);
+          }
+          // Let the target app consume the paste before we restore the clipboard.
+          await sleep(150);
+          if (original) await writeClipboard(original);
+        } else {
+          // writeClipboard unavailable (Linux) or failed — fall back to typing.
+          const lines = text.split(/\r?\n/);
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i]) libnut.typeString(lines[i]);
+            if (i < lines.length - 1) libnut.keyTap("enter", []);
+          }
+        }
+        return;
       }
 
       const charDelay = toNumber(settings.charDelay, DEFAULTS.charDelay);
@@ -292,9 +359,6 @@ export abstract class BaseTypeAction<
 
       const delay = (ms: number): Promise<void> =>
         sleep(applyJitter(ms, jitterPct));
-
-      // Give the user a moment to refocus the target window.
-      await sleep(DEFAULTS.initialDelay);
 
       let buffer = "";
       const flush = (): void => {

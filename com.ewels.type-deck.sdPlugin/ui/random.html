@@ -4,6 +4,7 @@
     <title>Type Deck - Random Pick Settings</title>
     <meta charset="utf-8" />
     <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+    <script src="instant-toggle.js"></script>
     <style>
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -46,9 +47,22 @@
       <code>}}</code> for literal braces.
     </small>
 
+    <div class="section">Instant type</div>
+    <sdpi-item label="Instant type">
+      <sdpi-checkbox
+        setting="instantType"
+        label="Type entire text in one go"
+      ></sdpi-checkbox>
+    </sdpi-item>
+    <small class="help">
+      Pastes the whole text via the system clipboard (your previous clipboard
+      contents are restored). Good for large texts.
+    </small>
+
     <div class="section">Safety</div>
     <sdpi-item label="Cancel">
       <sdpi-checkbox
+        data-instant-toggle
         setting="cancelOnSecondPress"
         label="Pressing again aborts the current run"
         default="true"
@@ -61,6 +75,7 @@
     <div class="section">Timing</div>
     <sdpi-item label="Character delay (ms)">
       <sdpi-textfield
+        data-instant-toggle
         setting="charDelay"
         inputmode="numeric"
         pattern="[0-9]*"
@@ -70,6 +85,7 @@
     </sdpi-item>
     <sdpi-item label="Word delay (ms)">
       <sdpi-textfield
+        data-instant-toggle
         setting="wordDelay"
         inputmode="numeric"
         pattern="[0-9]*"
@@ -79,6 +95,7 @@
     </sdpi-item>
     <sdpi-item label="Paragraph delay (ms)">
       <sdpi-textfield
+        data-instant-toggle
         setting="paragraphDelay"
         inputmode="numeric"
         pattern="[0-9]*"
@@ -90,6 +107,7 @@
     <div class="section">Natural typing</div>
     <sdpi-item label="Jitter">
       <sdpi-checkbox
+        data-instant-toggle
         setting="jitterEnabled"
         label="Randomize delays"
         default="true"
@@ -97,6 +115,7 @@
     </sdpi-item>
     <sdpi-item label="Jitter amount (%)">
       <sdpi-textfield
+        data-instant-toggle
         setting="jitterPercent"
         inputmode="numeric"
         pattern="[0-9]*"
@@ -107,12 +126,14 @@
 
     <sdpi-item label="Typos">
       <sdpi-checkbox
+        data-instant-toggle
         setting="typosEnabled"
         label="Occasional adjacent-key typos"
       ></sdpi-checkbox>
     </sdpi-item>
     <sdpi-item label="Typo chance (%)">
       <sdpi-textfield
+        data-instant-toggle
         setting="typoChance"
         inputmode="numeric"
         pattern="[0-9]*"
