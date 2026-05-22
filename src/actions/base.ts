@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import {
+import streamDeck, {
   type DidReceiveSettingsEvent,
   type KeyDownEvent,
   type KeyUpEvent,
@@ -406,6 +406,9 @@ export abstract class BaseTypeAction<
         }
       }
       flush();
+    } catch (err) {
+      streamDeck.logger.error("Typing run failed", err);
+      await action.showAlert();
     } finally {
       this.isTyping = false;
       this.abortRequested = false;
