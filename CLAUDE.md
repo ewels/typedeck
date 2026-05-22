@@ -10,6 +10,8 @@ A Stream Deck plugin ("Type Deck") that simulates a human typing preset text int
 - `com.ewels.type-deck.cycle` ("Cycle next") — text is one entry per line; each press types the next line, looping. Persists `cycleIndex` in settings.
 - `com.ewels.type-deck.random` ("Random pick") — text is one entry per line; each press types a random line.
 
+Every action also supports `instantType` (paste-via-clipboard); see [Instant type](#instant-type) below.
+
 ## Commands
 
 ```sh
@@ -35,6 +37,24 @@ prek auto-update          # bump pinned hook revs
 ```
 
 Hooks: standard pre-commit-hooks (whitespace/EOL/yaml/json/merge-conflict), Prettier (JSON/YAML/MD/HTML/CSS), Biome (lint + format for JS/TS).
+
+## Release process
+
+The version lives in `com.ewels.type-deck.sdPlugin/manifest.json` as a four-part `X.Y.Z.0` string (Elgato's format — the trailing `.0` stays zero). `package.json` is `private: true` with no `version` field, so the manifest is the only place to bump.
+
+To cut a release:
+
+```sh
+# 1. Bump manifest "Version" to "X.Y.Z.0" on a clean tree, then push.
+git commit -m "Bump version to X.Y.Z" com.ewels.type-deck.sdPlugin/manifest.json
+git push origin main
+# 2. Create the release. gh creates the tag on the remote at HEAD; no local tag needed.
+gh release create vX.Y.Z --title "vX.Y.Z — <headline>" --notes "..."
+```
+
+**Do not `streamdeck pack` locally and attach the asset by hand.** `.github/workflows/release.yml` fires on `release: published`, runs `npm ci && npm run build`, stages a tiny `package.json` inside `com.ewels.type-deck.sdPlugin/` so `@nut-tree-fork/libnut` is installed alongside `bin/plugin.js` (all three `libnut-{darwin,win32,linux}` `.node` files), packs the plugin, and uploads `com.ewels.type-deck.streamDeckPlugin` to the release with `--clobber`. A locally-packed asset would only carry the host platform's libnut binary.
+
+Release-notes style mirrors past releases: title is `vX.Y.Z — <headline>`, body has `## Highlights` and `## Install` sections. Check `gh release view vX.Y.Z` on a previous release for the exact template.
 
 ## Architecture
 
@@ -76,6 +96,20 @@ Per-action persisted state (counter, cycleIndex) is stored in the action's setti
 
 `pickText`'s `update` is persisted **before typing starts**, so an aborted run still advances the cycle. Variables (`{date}`, `{time}`, `{clipboard}`, `{counter}`) are always expanded; `{counter}` only writes to settings when actually referenced in the text.
 
+### Instant type
+
+If `settings.instantType` is set, the per-character typing loop is bypassed. The flow:
+
+1. Snapshot the current clipboard via `readClipboard()` (kicked off in parallel with `expandVariables` to save a subprocess round-trip).
+2. `writeClipboard(text)`.
+3. `libnut.keyTap("v", [modifier])` where modifier is `"meta"` on macOS, `"control"` elsewhere.
+4. Sleep 150 ms so the target app consumes the paste.
+5. Restore the original clipboard.
+
+If `writeClipboard` is unavailable (Linux has no `pbcopy` / `Set-Clipboard`) or fails, the path falls back to a line-by-line `libnut.typeString` + `keyTap("enter")` loop (still bypassing per-character timing / jitter / typos — those only apply to the regular typing path).
+
+Timing/jitter/typo settings are all ignored when `instantType` is on; the PI HTML greys them out.
+
 ### Native keyboard / clipboard
 
 The plugin calls into [`@nut-tree-fork/libnut`](https://www.npmjs.com/package/@nut-tree-fork/libnut) directly (the raw native binding under nut-js) via its internal subpath `dist/import_libnut.js` — a type shim lives at `src/types/libnut.d.ts`. We use exactly three libnut functions: `typeString`, `keyTap`, `setKeyboardDelay`. Clipboard reads use a small `pbpaste` / PowerShell `Get-Clipboard` subprocess in `readClipboard()`; no clipboard dependency.
@@ -88,11 +122,12 @@ At the top of `src/actions/base.ts` you'll see `libnut.setKeyboardDelay(0)`. Don
 
 Related: the local `sleep()` helper uses `setTimeout` for _every_ value including 0 ms. A `Promise.resolve()` for 0 ms only flushes the microtask queue and does not yield to macrotasks (where websocket messages dispatch), so a 100%-jitter roll of 0 ms would otherwise also block event delivery.
 
+Related: the Instant type path temporarily restores `setKeyboardDelay(40)` just around the `keyTap("v", [modifier])` call, then sets it back to 0. macOS won't register Cmd+V if there's zero gap between the modifier press and the key tap — the 40 ms gap is what makes the paste actually fire.
+
 ### Property inspector quirks
 
 - Plain HTML elements (`<small>`, `<div>`, plain text) inherit the Stream Deck PI webview's default font, which on macOS WebKit is **Times serif**. The `<style>` block sets `body { font-family: <system stack> }` to fix this. sdpi-components style their own shadow DOMs and are unaffected.
 - `sdpi-checkbox` value is a real boolean; `default="true"` is the initial display value when the setting is undefined — it doesn't necessarily auto-persist until the user touches the form.
-- Cycle and Random pick are now separate actions, not checkboxes; their PI HTML lives alongside `ui/type.html`.
 
 ### Settings schema
 
@@ -101,3 +136,7 @@ Related: the local `sleep()` helper uses `setTimeout` for _every_ value includin
 ### Manifest
 
 `com.ewels.type-deck.sdPlugin/manifest.json` declares `Software.MinimumVersion: "7.1"` and `SDKVersion: 3`. The manifest's `$schema` URL points at Elgato's JSON schema; VS Code also has a schema mapping in `.vscode/settings.json`. The 7.1 branch of the schema marks `Software`, `Actions`, `Author`, `CodePath`, `Description`, `Icon`, `Name`, `OS`, `SDKVersion`, `UUID`, `Version` as required.
+
+## Conventions
+
+**No em-dashes in user-facing text.** README copy, UI HTML labels and tooltips, anything visible to a Stream Deck user (including source comments captured in screenshots): use a period, colon, or parentheses instead of `—`. Em-dashes read as AI-generated. See commit `eba48ca` ("Death to the emdashes") for the precedent — it touched `README.md`, the action PI HTML files, and a comment in `src/actions/base.ts`. This rule does **not** apply to internal docs like CLAUDE.md or this file.
